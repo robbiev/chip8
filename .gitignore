@@ -1,3 +1,4 @@
 main
 *.ch8
 main.dSYM/
+.idea
