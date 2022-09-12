@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
   read_file(file, &chip8.memory[PROGRAM_START_ADDRESS], (sizeof chip8.memory) - PROGRAM_START_ADDRESS);
   //chip8.memory[0x1FF] = 1; // IBM
   //chip8.memory[0x1FF] = 2; // opcodes
-  chip8.memory[0x1FF] = 3; // flags
+  //chip8.memory[0x1FF] = 3; // flags
 
   puts("\x1b[?1049h");
 
