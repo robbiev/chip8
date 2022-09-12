@@ -252,7 +252,7 @@ int main(int argc, char **argv) {
             {
               uint8_t vx = chip8.v[b1lo];
               uint8_t vy = chip8.v[b2hi];
-              if ((uint16_t)vx + vy > 0xffff) {
+              if ((uint8_t)(vx + vy) < vx) {
                 chip8.v[0xf] = 1;
               } else {
                 chip8.v[0xf] = 0;
@@ -265,7 +265,7 @@ int main(int argc, char **argv) {
             {
               uint8_t vx = chip8.v[b1lo];
               uint8_t vy = chip8.v[b2hi];
-              if ((int16_t)vx - vy < 0)  {
+              if (vy > vx)  {
                 chip8.v[0xf] = 0;
               } else {
                 chip8.v[0xf] = 1;
@@ -275,15 +275,18 @@ int main(int argc, char **argv) {
             break;
           case 0x6:
             fprintf(stderr, "SHR V%hhx V%hhx\n", b1lo, b2hi);
-            chip8.v[b1lo] = (chip8.v[b2hi] >> 1);
-            chip8.v[0xf] = chip8.v[b2hi] & (~chip8.v[b2hi] + 1);
+            {
+              uint8_t vy = chip8.v[b2hi];
+              chip8.v[b1lo] = vy >> 1;
+              chip8.v[0xf] = vy & 0x01;
+            }
             break;
           case 0x7:
             fprintf(stderr, "SUBN V%hhx V%hhx\n", b1lo, b2hi);
             {
               uint8_t vx = chip8.v[b1lo];
               uint8_t vy = chip8.v[b2hi];
-              if ((int16_t)vy - vx < 0)  {
+              if (vx > vy)  {
                 chip8.v[0xf] = 0;
               } else {
                 chip8.v[0xf] = 1;
@@ -293,8 +296,11 @@ int main(int argc, char **argv) {
             break;
           case 0xe:
             fprintf(stderr, "SHL V%hhx V%hhx\n", b1lo, b2hi);
-            chip8.v[b1lo] = (chip8.v[b2hi] << 1);
-            chip8.v[0xf] = chip8.v[b2hi] & 0x80;
+            {
+              uint8_t vy = chip8.v[b2hi];
+              chip8.v[b1lo] = vy << 1;
+              chip8.v[0xf] = (vy & 0x80) != 0;
+            }
             break;
           default:
             assert(0);
@@ -451,7 +457,7 @@ int main(int argc, char **argv) {
       draw(&chip8);
     }
     chip8.pc = new_pc;
-    msleep(16);
+    msleep(2);
     //msleep(100);
   }
   //msleep(10000);
