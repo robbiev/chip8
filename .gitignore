@@ -1,4 +1,4 @@
-main
+terminal
 *.ch8
-main.dSYM/
+*.dSYM/
 .idea
