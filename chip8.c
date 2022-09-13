@@ -126,14 +126,17 @@ bool cycle(char key, struct chip8 *chip8) {
         case 0x1:
           fprintf(stderr, "OR V%hhx V%hhx\n", b1lo, b2hi);
           chip8->v[b1lo] |= chip8->v[b2hi];
+          chip8->v[0xf] = 0;
           break;
         case 0x2:
           fprintf(stderr, "AND V%hhx V%hhx\n", b1lo, b2hi);
           chip8->v[b1lo] &= chip8->v[b2hi];
+          chip8->v[0xf] = 0;
           break;
         case 0x3:
           fprintf(stderr, "XOR V%hhx V%hhx\n", b1lo, b2hi);
           chip8->v[b1lo] ^= chip8->v[b2hi];
+          chip8->v[0xf] = 0;
           break;
         case 0x4:
           fprintf(stderr, "ADD V%hhx V%hhx\n", b1lo, b2hi);

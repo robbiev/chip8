@@ -111,15 +111,18 @@ int main(int argc, char **argv) {
   enableRawMode();
 
   puts("\x1b[?1049h");
-  uint64_t last_key_read = 0;
+  uint64_t key_age_counter = 0;
+  uint64_t loop_counter = 0;
   char key = -1;
   for (;;) {
+    loop_counter++;
     char k = read_key();
     if (k != -1) {
       key = k;
-      last_key_read = 0;
+      key_age_counter = 0;
     }
     char kcode = key_code(key);
+    key_age_counter++;
 
     if (chip8.dt > 0) {
       chip8.dt--;
@@ -133,15 +136,14 @@ int main(int argc, char **argv) {
       redraw |= cycle(kcode, &chip8);
     }
 
-    last_key_read++;
-    if (redraw) {
+    if (loop_counter % 5 == 0) {
       draw(&chip8);
     }
 
     // unset the key if it lasted for 13 cycles
-    if (key != -1 && last_key_read % 13 == 0) {
+    if (key != -1 && key_age_counter % 13 == 0) {
       key = -1;
-      last_key_read = 0;
+      key_age_counter = 0;
     }
     msleep(16);
   }
