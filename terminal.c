@@ -89,8 +89,8 @@ size_t read_file(char *file, uint8_t *buffer, size_t buffer_len) {
 
 void draw(struct chip8 *chip8) {
   puts("\x1b[2J");
-  for (int r = 0; r < DISPLAY_ROWS; r++) {
-    for (int c = 0; c < DISPLAY_COLS; c++) {
+  for (size_t r = 0; r < DISPLAY_ROWS; r++) {
+    for (size_t c = 0; c < DISPLAY_COLS; c++) {
       size_t display_pos = r * DISPLAY_COLS + c;
       size_t display_index = display_pos / 8;
       size_t display_bit = display_pos % 8;

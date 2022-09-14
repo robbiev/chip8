@@ -94,6 +94,13 @@ void init(struct chip8 *chip8) {
   chip8->sp = ARRAY_LEN(chip8->stack);
 }
 
+size_t min(size_t a, size_t b) {
+  if (a < b) {
+    return a;
+  }
+  return b;
+}
+
 bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
   uint8_t b1 = chip8->memory[chip8->pc];
   uint8_t b2 = chip8->memory[chip8->pc + 1];
@@ -270,17 +277,14 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
       uint8_t row = chip8->v[b2hi] & (DISPLAY_ROWS - 1);
       uint16_t address = chip8->i;
       chip8->v[0xf] = 0;
-      for (int i = 0; i < b2lo && row < DISPLAY_ROWS; i++) {
+      for (size_t i = 0; i < b2lo && row < DISPLAY_ROWS; i++) {
         uint8_t sprite_data = chip8->memory[address];
 
-        for (int bit = 7; bit >= 0; bit--) {
-          if (col + (7-bit) >= DISPLAY_COLS) {
-            continue;
-          }
-          size_t display_pos = (row * DISPLAY_COLS) + col + (7-bit);
+        for (size_t bit = 0; bit < min(DISPLAY_COLS - col, 8); bit++) {
+          size_t display_pos = (row * DISPLAY_COLS) + col + bit;
           uint8_t prev_byte = chip8->display[display_pos / 8];
           uint8_t prev_bit = prev_byte >> (7 - (display_pos % 8)) & 1;
-          uint8_t sprite_bit = (sprite_data >> bit) & 1;
+          uint8_t sprite_bit = (sprite_data >> (7 - bit)) & 1;
           uint8_t new_bit = prev_bit ^ sprite_bit;
           uint8_t prev_byte_cleared_bit = prev_byte & ~(1 << (7 - (display_pos % 8)));
           uint8_t new_byte = prev_byte_cleared_bit | (new_bit << (7 - (display_pos % 8)));
