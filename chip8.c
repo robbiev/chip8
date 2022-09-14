@@ -34,15 +34,15 @@ uint8_t font[] = {
 };
 
 struct chip8 {
+  uint8_t memory[4096];
+  uint8_t display[DISPLAY_BYTES];
+  uint16_t stack[16];
   uint8_t v[16];
+  uint16_t pc;
   uint16_t i;
+  uint8_t sp;
   uint8_t st;
   uint8_t dt;
-  uint16_t pc;
-  uint8_t sp;
-  uint16_t stack[16];
-  uint8_t display[DISPLAY_BYTES];
-  uint8_t memory[4096];
 };
 
 enum opcode {
@@ -84,8 +84,8 @@ enum opcode {
 };
 
 struct instruction {
-  enum opcode operation;
   uint8_t value[2];
+  enum opcode operation;
 };
 
 void init(struct chip8 *chip8) {
