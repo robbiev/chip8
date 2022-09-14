@@ -88,6 +88,11 @@ struct instruction {
   enum opcode operation;
 };
 
+struct cycle_result {
+  struct instruction instr;
+  bool redraw_needed;
+};
+
 void init(struct chip8 *chip8) {
   memcpy(chip8->memory, font, sizeof(font));
   chip8->pc = PROGRAM_START_ADDRESS;
@@ -101,7 +106,7 @@ size_t min(size_t a, size_t b) {
   return b;
 }
 
-bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
+void cycle(char key, struct chip8 *chip8, struct cycle_result *res) {
   uint8_t b1 = chip8->memory[chip8->pc];
   uint8_t b2 = chip8->memory[chip8->pc + 1];
   uint16_t new_pc = chip8->pc + 2;
@@ -111,87 +116,87 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
   uint8_t b2lo = b2 & 0xf;
   uint8_t b2hi = b2 >> 4 & 0xf;
 
-  instr->value[0] = b1;
-  instr->value[1] = b2;
+  res->instr.value[0] = b1;
+  res->instr.value[1] = b2;
 
-  bool redraw_needed = false;
+  res->redraw_needed = false;
 
   switch (b1hi) {
     case 0x0:
       if (b1 == 0x00 && b2 == 0xe0) {
-        instr->operation = OP_00E0;
+        res->instr.operation = OP_00E0;
         memset(chip8->display, 0, sizeof(chip8->display));
-        redraw_needed = true;
+        res->redraw_needed = true;
         break;
       }
       if (b1 == 0x00 && b2 == 0xee) {
-        instr->operation = OP_00EE;
+        res->instr.operation = OP_00EE;
         new_pc = chip8->stack[chip8->sp];
         new_pc += 2;
         chip8->sp++;
         break;
       }
-      instr->operation = OP_0NNN; // ignored instruction (jump to machine code)
+      res->instr.operation = OP_0NNN; // ignored instruction (jump to machine code)
       break;
     case 0x1:
-      instr->operation = OP_1NNN;
+      res->instr.operation = OP_1NNN;
       new_pc = (b1lo << 8) | b2;
       break;
     case 0x2:
-      instr->operation = OP_2NNN;
+      res->instr.operation = OP_2NNN;
       chip8->sp--;
       chip8->stack[chip8->sp] = chip8->pc;
       new_pc = (b1lo << 8) | b2;
       break;
     case 0x3:
-      instr->operation = OP_3XNN;
+      res->instr.operation = OP_3XNN;
       if (chip8->v[b1lo] == b2) {
         new_pc += 2;
       }
       break;
     case 0x4:
-      instr->operation = OP_4XNN;
+      res->instr.operation = OP_4XNN;
       if (chip8->v[b1lo] != b2) {
         new_pc += 2;
       }
       break;
     case 0x5:
-      instr->operation = OP_5XY0;
+      res->instr.operation = OP_5XY0;
       if (chip8->v[b1lo] == chip8->v[b2hi]) {
         new_pc += 2;
       }
       break;
     case 0x6:
-      instr->operation = OP_6XNN;
+      res->instr.operation = OP_6XNN;
       chip8->v[b1lo] = b2;
       break;
     case 0x7:
-      instr->operation = OP_7XNN;
+      res->instr.operation = OP_7XNN;
       chip8->v[b1lo] += b2;
       break;
     case 0x8:
       switch (b2lo) {
         case 0x0:
-          instr->operation = OP_8XY0;
+          res->instr.operation = OP_8XY0;
           chip8->v[b1lo] = chip8->v[b2hi];
           break;
         case 0x1:
-          instr->operation = OP_8XY1;
+          res->instr.operation = OP_8XY1;
           chip8->v[b1lo] |= chip8->v[b2hi];
           chip8->v[0xf] = 0;
           break;
         case 0x2:
-          instr->operation = OP_8XY2;
+          res->instr.operation = OP_8XY2;
           chip8->v[b1lo] &= chip8->v[b2hi];
           chip8->v[0xf] = 0;
           break;
         case 0x3:
-          instr->operation = OP_8XY3;
+          res->instr.operation = OP_8XY3;
           chip8->v[b1lo] ^= chip8->v[b2hi];
           chip8->v[0xf] = 0;
           break;
         case 0x4: {
-          instr->operation = OP_8XY4;
+          res->instr.operation = OP_8XY4;
           uint8_t vx = chip8->v[b1lo];
           uint8_t vy = chip8->v[b2hi];
           if ((uint8_t)(vx + vy) < vx) {
@@ -203,7 +208,7 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
           break;
         }
         case 0x5: {
-          instr->operation = OP_8XY5;
+          res->instr.operation = OP_8XY5;
           uint8_t vx = chip8->v[b1lo];
           uint8_t vy = chip8->v[b2hi];
           if (vy > vx)  {
@@ -215,14 +220,14 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
           break;
         }
         case 0x6: {
-          instr->operation = OP_8XY6;
+          res->instr.operation = OP_8XY6;
             uint8_t vy = chip8->v[b2hi];
             chip8->v[b1lo] = vy >> 1;
             chip8->v[0xf] = vy & 0x01;
           break;
         }
         case 0x7: {
-          instr->operation = OP_8XY7;
+          res->instr.operation = OP_8XY7;
           uint8_t vx = chip8->v[b1lo];
           uint8_t vy = chip8->v[b2hi];
           if (vx > vy)  {
@@ -234,7 +239,7 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
           break;
         }
         case 0xe: {
-          instr->operation = OP_8XYE;
+          res->instr.operation = OP_8XYE;
           uint8_t vy = chip8->v[b2hi];
           chip8->v[b1lo] = vy << 1;
           chip8->v[0xf] = (vy & 0x80) != 0;
@@ -247,7 +252,7 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
     case 0x9:
       switch (b2lo) {
         case 0x0:
-          instr->operation = OP_9XY0;
+          res->instr.operation = OP_9XY0;
           if (chip8->v[b1lo] != chip8->v[b2hi]) {
             new_pc += 2;
           }
@@ -257,22 +262,22 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
       }
       break;
     case 0xa:
-      instr->operation = OP_ANNN;
+      res->instr.operation = OP_ANNN;
       chip8->i = (b1lo << 8) | b2;
       break;
     case 0xb:
-      instr->operation = OP_BNNN;
+      res->instr.operation = OP_BNNN;
       new_pc = ((b1lo << 8) | b2) + chip8->v[0];
       break;
     case 0xc:
-      instr->operation = OP_CXNN;
+      res->instr.operation = OP_CXNN;
       chip8->v[b1lo] = CHIP8_RAND() & b2;
       break;
     case 0xd: {
-      instr->operation = OP_DXYN;
+      res->instr.operation = OP_DXYN;
       // Draw a sprite at position VX, VY with N bytes of sprite data starting at the address stored in I
       // Set VF to 01 if any set pixels are changed to unset, and 00 otherwise
-      redraw_needed = true;
+      res->redraw_needed = true;
       uint8_t col = chip8->v[b1lo] & (DISPLAY_COLS - 1);
       uint8_t row = chip8->v[b2hi] & (DISPLAY_ROWS - 1);
       uint16_t address = chip8->i;
@@ -301,14 +306,14 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
     case 0xe:
       switch (b2) {
         case 0x9e:
-          instr->operation = OP_EX9E;
+          res->instr.operation = OP_EX9E;
           // Skip the following instruction if the key corresponding to the hex value currently stored in register VX is pressed
           if (chip8->v[b1lo] == key) {
             new_pc += 2;
           }
           break;
         case 0xa1:
-          instr->operation = OP_EXA1;
+          res->instr.operation = OP_EXA1;
           // Skip the following instruction if the key corresponding to the hex value currently stored in register VX is not pressed
           if (chip8->v[b1lo] != key) {
             new_pc += 2;
@@ -321,12 +326,12 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
     case 0xf:
       switch (b2) {
         case 0x07:
-          instr->operation = OP_FX07;
+          res->instr.operation = OP_FX07;
           // Store the current value of the delay timer in register VX
           chip8->v[b1lo] = chip8->dt;
           break;
         case 0x0a:
-          instr->operation = OP_FX0A;
+          res->instr.operation = OP_FX0A;
           // Wait for a keypress and store the result in register VX
           if (key == -1) {
             new_pc = chip8->pc;
@@ -335,34 +340,34 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
           }
           break;
         case 0x15:
-          instr->operation = OP_FX15;
+          res->instr.operation = OP_FX15;
           // Set the delay timer to the value of register VX
           chip8->dt = chip8->v[b1lo];
           break;
         case 0x18:
-          instr->operation = OP_FX18;
+          res->instr.operation = OP_FX18;
           // Set the sound timer to the value of register VX
           chip8->st = chip8->v[b1lo];
           break;
         case 0x1e:
-          instr->operation = OP_FX1E;
+          res->instr.operation = OP_FX1E;
           // Add the value stored in register VX to register I
           chip8->i += chip8->v[b1lo];
           break;
         case 0x29:
-          instr->operation = OP_FX29;
+          res->instr.operation = OP_FX29;
           // Set I to the memory address of the sprite data corresponding to the hexadecimal digit stored in register VX
           chip8->i = b1lo * 5;
           break;
         case 0x33:
-          instr->operation = OP_FX33;
+          res->instr.operation = OP_FX33;
           // Store the binary-coded decimal equivalent of the value stored in register VX at addresses I, I + 1, and I + 2
           chip8->memory[chip8->i] = chip8->v[b1lo] / 100;
           chip8->memory[chip8->i + 1] = (chip8->v[b1lo] / 10) % 10;
           chip8->memory[chip8->i + 2] = chip8->v[b1lo] % 10;
           break;
         case 0x55:
-          instr->operation = OP_FX55;
+          res->instr.operation = OP_FX55;
           // Store the values of registers V0 to VX inclusive in memory starting at address I
           // I is set to I + X + 1 after operation
           for (int i = 0; i <= b1lo; i++) {
@@ -371,7 +376,7 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
           chip8->i = chip8->i + b1lo + 1;
           break;
         case 0x65:
-          instr->operation = OP_FX65;
+          res->instr.operation = OP_FX65;
           // Fill registers V0 to VX inclusive with the values stored in memory starting at address I
           // I is set to I + X + 1 after operation
           for (int i = 0; i <= b1lo; i++) {
@@ -387,7 +392,6 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
       assert(0);
   }
   chip8->pc = new_pc;
-  return redraw_needed;
 }
 
 char key_code(char key) {

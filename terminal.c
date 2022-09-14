@@ -265,10 +265,11 @@ int main(int argc, char **argv) {
     }
 
     bool redraw = false;
-    struct instruction instr = {0};
+    struct cycle_result res = {0};
     for (int i = 0; i < 9; i++) {
-      redraw |= cycle(kcode, &chip8, &instr);
-      print_instruction(&instr);
+      cycle(kcode, &chip8, &res);
+      redraw |= res.redraw_needed;
+      print_instruction(&res.instr);
     }
 
     if (loop_counter % 5 == 0) {
