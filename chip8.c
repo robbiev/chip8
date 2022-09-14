@@ -1,14 +1,16 @@
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <string.h>
 #include <assert.h>
-#include <stdlib.h>
+#include <string.h>
 
 #define PROGRAM_START_ADDRESS 0x200
 
 #define DISPLAY_COLS 64
 #define DISPLAY_ROWS 32
+
+#ifndef CHIP8_RAND
+#define CHIP8_RAND ((void)0))
+#endif
 
 uint8_t font[] = {
   0xF0, 0x90, 0x90, 0x90, 0xF0,
@@ -41,19 +43,59 @@ struct chip8 {
   uint8_t memory[4096];
 };
 
+enum opcode {
+  OP_00E0,
+  OP_00EE,
+  OP_0NNN,
+  OP_1NNN,
+  OP_2NNN,
+  OP_3XNN,
+  OP_4XNN,
+  OP_5XY0,
+  OP_6XNN,
+  OP_7XNN,
+  OP_8XY0,
+  OP_8XY1,
+  OP_8XY2,
+  OP_8XY3,
+  OP_8XY4,
+  OP_8XY5,
+  OP_8XY6,
+  OP_8XY7,
+  OP_8XYE,
+  OP_9XY0,
+  OP_ANNN,
+  OP_BNNN,
+  OP_CXNN,
+  OP_DXYN,
+  OP_EX9E,
+  OP_EXA1,
+  OP_FX07,
+  OP_FX0A,
+  OP_FX15,
+  OP_FX18,
+  OP_FX1E,
+  OP_FX29,
+  OP_FX33,
+  OP_FX55,
+  OP_FX65,
+};
+
+struct instruction {
+  enum opcode operation;
+  uint8_t value[2];
+};
+
 void init(struct chip8 *chip8) {
   memcpy(chip8->memory, font, sizeof(font));
   chip8->pc = PROGRAM_START_ADDRESS;
-  //chip8.pc = 0x250;
-
   //chip8.memory[0x1FF] = 1; // IBM
   //chip8.memory[0x1FF] = 2; // opcodes
   //chip8.memory[0x1FF] = 3; // flags
 }
 
-bool cycle(char key, struct chip8 *chip8) {
+bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
   bool redraw = false;
-  fprintf(stderr, "key: %d, V0: %d, V1: %d\n", key, chip8->v[0], chip8->v[1]);
   uint8_t b1 = chip8->memory[chip8->pc];
   uint8_t b2 = chip8->memory[chip8->pc + 1];
   uint16_t new_pc = chip8->pc + 2;
@@ -62,84 +104,86 @@ bool cycle(char key, struct chip8 *chip8) {
   uint8_t b1hi = b1 >> 4 & 0xf;
   uint8_t b2lo = b2 & 0xf;
   uint8_t b2hi = b2 >> 4 & 0xf;
-  //fprintf(stderr, "%hhx%hhx%hhx%hhx\n", b1hi, b1lo, b2hi, b2lo);
+
+  instr->value[0] = b1;
+  instr->value[1] = b2;
+
   switch (b1hi) {
     case 0x0:
       if (b1 == 0x00 && b2 == 0xe0) {
-        fprintf(stderr, "CLS\n");
+        instr->operation = OP_00E0;
         memset(chip8->display, 0, sizeof(chip8->display));
         redraw = true;
         break;
       }
       if (b1 == 0x00 && b2 == 0xee) {
-        fprintf(stderr, "RET\n");
+        instr->operation = OP_00EE;
         new_pc = chip8->stack[chip8->sp];
         new_pc += 2;
         chip8->sp--;
         break;
       }
-      fprintf(stderr, "SYS %hhx%hhx%hhx\n", b1lo, b2hi, b2lo); // jump to machine language
-      // ignored by modern impls
+      instr->operation = OP_0NNN; // ignored instruction (jump to machine code)
       break;
     case 0x1:
-      fprintf(stderr, "JP %hhx%hhx%hhx\n", b1lo, b2hi, b2lo); // jump to address
+      instr->operation = OP_1NNN;
       new_pc = (b1lo << 8) | b2;
       break;
     case 0x2:
-      fprintf(stderr, "CALL %hhx%hhx%hhx\n", b1lo, b2hi, b2lo); // execute subroutine
+      instr->operation = OP_2NNN;
       chip8->sp++;
       chip8->stack[chip8->sp] = chip8->pc;
       new_pc = (b1lo << 8) | b2;
       break;
     case 0x3:
-      fprintf(stderr, "SE V%hhx %hhx%hhx\n", b1lo, b2hi, b2lo); // skip if equal
+      instr->operation = OP_3XNN;
       if (chip8->v[b1lo] == b2) {
         new_pc += 2;
       }
       break;
     case 0x4:
-      fprintf(stderr, "SNE V%hhx %hhx%hhx\n", b1lo, b2hi, b2lo); // skip if not equal
+      instr->operation = OP_4XNN;
       if (chip8->v[b1lo] != b2) {
         new_pc += 2;
       }
       break;
     case 0x5:
-      fprintf(stderr, "SE V%hhx V%hhx %hhx\n", b1lo, b2hi, b2lo); // skip if equal
+      instr->operation = OP_5XY0;
       if (chip8->v[b1lo] == chip8->v[b2hi]) {
         new_pc += 2;
       }
       break;
     case 0x6:
-      fprintf(stderr, "LD V%hhx %hhx%hhx\n", b1lo, b2hi, b2lo); // load in register
+      instr->operation = OP_6XNN;
       chip8->v[b1lo] = b2;
       break;
     case 0x7:
-      fprintf(stderr, "ADD V%hhx %hhx%hhx\n", b1lo, b2hi, b2lo); // add constant
+      instr->operation = OP_7XNN;
       chip8->v[b1lo] += b2;
       break;
     case 0x8:
       switch (b2lo) {
         case 0x0:
-          fprintf(stderr, "LD V%hhx V%hhx\n", b1lo, b2hi);
+          instr->operation = OP_8XY0;
           chip8->v[b1lo] = chip8->v[b2hi];
           break;
         case 0x1:
-          fprintf(stderr, "OR V%hhx V%hhx\n", b1lo, b2hi);
+          instr->operation = OP_8XY1;
           chip8->v[b1lo] |= chip8->v[b2hi];
           chip8->v[0xf] = 0;
           break;
         case 0x2:
-          fprintf(stderr, "AND V%hhx V%hhx\n", b1lo, b2hi);
+          instr->operation = OP_8XY2;
           chip8->v[b1lo] &= chip8->v[b2hi];
           chip8->v[0xf] = 0;
           break;
         case 0x3:
-          fprintf(stderr, "XOR V%hhx V%hhx\n", b1lo, b2hi);
+          instr->operation = OP_8XY3;
           chip8->v[b1lo] ^= chip8->v[b2hi];
           chip8->v[0xf] = 0;
           break;
         case 0x4:
-          fprintf(stderr, "ADD V%hhx V%hhx\n", b1lo, b2hi);
+          instr->operation = OP_8XY4;
           {
             uint8_t vx = chip8->v[b1lo];
             uint8_t vy = chip8->v[b2hi];
@@ -152,7 +196,7 @@ bool cycle(char key, struct chip8 *chip8) {
             break;
           }
         case 0x5:
-          fprintf(stderr, "SUB V%hhx V%hhx\n", b1lo, b2hi);
+          instr->operation = OP_8XY5;
           {
             uint8_t vx = chip8->v[b1lo];
             uint8_t vy = chip8->v[b2hi];
@@ -165,7 +209,7 @@ bool cycle(char key, struct chip8 *chip8) {
           }
           break;
         case 0x6:
-          fprintf(stderr, "SHR V%hhx V%hhx\n", b1lo, b2hi);
+          instr->operation = OP_8XY6;
           {
             uint8_t vy = chip8->v[b2hi];
             chip8->v[b1lo] = vy >> 1;
@@ -173,7 +217,7 @@ bool cycle(char key, struct chip8 *chip8) {
           }
           break;
         case 0x7:
-          fprintf(stderr, "SUBN V%hhx V%hhx\n", b1lo, b2hi);
+          instr->operation = OP_8XY7;
           {
             uint8_t vx = chip8->v[b1lo];
             uint8_t vy = chip8->v[b2hi];
@@ -186,7 +230,7 @@ bool cycle(char key, struct chip8 *chip8) {
           }
           break;
         case 0xe:
-          fprintf(stderr, "SHL V%hhx V%hhx\n", b1lo, b2hi);
+          instr->operation = OP_8XYE;
           {
             uint8_t vy = chip8->v[b2hi];
             chip8->v[b1lo] = vy << 1;
@@ -200,7 +244,7 @@ bool cycle(char key, struct chip8 *chip8) {
     case 0x9:
       switch (b2lo) {
         case 0x0:
-          fprintf(stderr, "SNE V%hhx V%hhx\n", b1lo, b2hi);
+          instr->operation = OP_9XY0;
           if (chip8->v[b1lo] != chip8->v[b2hi]) {
             new_pc += 2;
           }
@@ -210,26 +254,25 @@ bool cycle(char key, struct chip8 *chip8) {
       }
       break;
     case 0xa:
-      fprintf(stderr, "LD I, %hhx%hhx%hhx\n", b1lo, b2hi, b2lo); // load NNN in register I
+      instr->operation = OP_ANNN;
       chip8->i = (b1lo << 8) | b2;
       break;
     case 0xb:
-      fprintf(stderr, "JP V0, %hhx%hhx%hhx\n", b1lo, b2hi, b2lo); // jump to V0 + NNN
+      instr->operation = OP_BNNN;
       new_pc = ((b1lo << 8) | b2) + chip8->v[0];
       break;
     case 0xc:
-      fprintf(stderr, "RND V%hhx, %hhx%hhx\n", b1lo, b2hi, b2lo); // Set VX to a random number with a mask of NN
-      chip8->v[b1lo] = rand() & b2;
+      instr->operation = OP_CXNN;
+      chip8->v[b1lo] = CHIP8_RAND() & b2;
       break;
     case 0xd:
+      instr->operation = OP_DXYN;
       // Draw a sprite at position VX, VY with N bytes of sprite data starting at the address stored in I
       // Set VF to 01 if any set pixels are changed to unset, and 00 otherwise
-      fprintf(stderr, "DRW V%hhx V%hhx %hhx\n", b1lo, b2hi, b2lo);
       {
         redraw = true;
         uint8_t col = chip8->v[b1lo] & (DISPLAY_COLS - 1);
         uint8_t row = chip8->v[b2hi] & (DISPLAY_ROWS - 1);
-        //fprintf(stderr, "row: %d, col: %d, count: %d, address: %d\n", row, col, b2lo, chip8->i);
         uint16_t address = chip8->i;
         chip8->v[0xf] = 0;
         for (int i = 0; i < b2lo && row < DISPLAY_ROWS; i++) {
@@ -255,20 +298,17 @@ bool cycle(char key, struct chip8 *chip8) {
     case 0xe:
       switch (b2) {
         case 0x9e:
+          instr->operation = OP_EX9E;
           // Skip the following instruction if the key corresponding to the hex value currently stored in register VX is pressed
-          fprintf(stderr, "SKP V%hhx\n", b1lo);
           if (chip8->v[b1lo] == key) {
-            fprintf(stderr, "SKP? %d %d\n", chip8->v[b1lo], key);
             new_pc += 2;
           }
           break;
         case 0xa1:
+          instr->operation = OP_EXA1;
           // Skip the following instruction if the key corresponding to the hex value currently stored in register VX is not pressed
         {
-          fprintf(stderr, "SKNP V%hhx\n", b1lo);
-          //fprintf(stderr, "XXX SKNP %hhx\n", chip8->v[b1lo]);
           if (chip8->v[b1lo] != key) {
-            //fprintf(stderr, "SKNP? %d %d\n", chip8->v[b1lo], key);
             new_pc += 2;
           }
         }
@@ -280,13 +320,13 @@ bool cycle(char key, struct chip8 *chip8) {
     case 0xf:
       switch (b2) {
         case 0x07:
+          instr->operation = OP_FX07;
           // Store the current value of the delay timer in register VX
-          fprintf(stderr, "LD V%hhx, DT\n", b1lo);
           chip8->v[b1lo] = chip8->dt;
           break;
         case 0x0a:
+          instr->operation = OP_FX0A;
           // Wait for a keypress and store the result in register VX
-          fprintf(stderr, "LD V%hhx, K\n", b1lo);
           if (key == -1) {
             new_pc = chip8->pc;
           } else {
@@ -294,44 +334,43 @@ bool cycle(char key, struct chip8 *chip8) {
           }
           break;
         case 0x15:
+          instr->operation = OP_FX15;
           // Set the delay timer to the value of register VX
-          fprintf(stderr, "LD DT, V%hhx\n", b1lo);
           chip8->dt = chip8->v[b1lo];
           break;
         case 0x18:
+          instr->operation = OP_FX18;
           // Set the sound timer to the value of register VX
-          fprintf(stderr, "LD ST, V%hhx\n", b1lo);
           chip8->st = chip8->v[b1lo];
           break;
         case 0x1e:
+          instr->operation = OP_FX1E;
           // Add the value stored in register VX to register I
-          fprintf(stderr, "ADD I, V%hhx\n", b1lo);
           chip8->i += chip8->v[b1lo];
           break;
         case 0x29:
+          instr->operation = OP_FX29;
           // Set I to the memory address of the sprite data corresponding to the hexadecimal digit stored in register VX
-          // TODO font data
-          fprintf(stderr, "LD F, V%hhx\n", b1lo);
           chip8->i = b1lo * 5;
           break;
         case 0x33:
+          instr->operation = OP_FX33;
           // Store the binary-coded decimal equivalent of the value stored in register VX at addresses I, I + 1, and I + 2
-          fprintf(stderr, "LD B, V%hhx\n", b1lo);
-          //assert(0);
+          assert(0);
           break;
         case 0x55:
+          instr->operation = OP_FX55;
           // Store the values of registers V0 to VX inclusive in memory starting at address I
           // I is set to I + X + 1 after operation
-          fprintf(stderr, "LD [I], V%hhx\n", b1lo);
           for (int i = 0; i <= b1lo; i++) {
             chip8->memory[chip8->i + i] = chip8->v[i];
           }
           chip8->i = chip8->i + b1lo + 1;
           break;
         case 0x65:
+          instr->operation = OP_FX65;
           // Fill registers V0 to VX inclusive with the values stored in memory starting at address I
           // I is set to I + X + 1 after operation
-          fprintf(stderr, "LD V%hhx, [I]\n", b1lo);
           for (int i = 0; i <= b1lo; i++) {
             chip8->v[i] = chip8->memory[chip8->i + i];
           }
@@ -366,6 +405,6 @@ char key_code(char key) {
     case 'r': return 0xD;
     case 'f': return 0xE;
     case 'v': return 0xF;
+    default: return -1;
   }
-  return -1;
 }

@@ -1,3 +1,7 @@
+#include <stdlib.h> // rand
+#define CHIP8_RAND rand
+#include "chip8.c"
+
 #include <stdio.h>
 #include <stdint.h>
 #include <sys/mman.h>
@@ -8,7 +12,6 @@
 
 #include <time.h>
 #include <errno.h>
-#include "chip8.c"
 
 struct termios orig_termios;
 
@@ -96,6 +99,129 @@ void draw(struct chip8 *chip8) {
   }
 }
 
+void print_instruction(struct instruction *instr) {
+  // last 12 bit
+  uint16_t nnn = ((instr->value[0] & 0xf) << 8) | instr->value[1];
+
+  // last byte
+  uint8_t nn = instr->value[1];
+
+  // 4 bit nibbles, excluding the first nibble because it never contains operands
+  uint8_t x = instr->value[0] & 0xf;
+  uint8_t y = instr->value[1] >> 4 & 0xf;
+  uint8_t n = instr->value[1] & 0xf;
+
+  switch (instr->operation) {
+    case OP_00E0:
+      fprintf(stderr, "CLS\n");
+      break;
+    case OP_00EE:
+      fprintf(stderr, "RET\n");
+      break;
+    case OP_0NNN:
+      fprintf(stderr, "SYS\n");
+      break;
+    case OP_1NNN:
+      fprintf(stderr, "JP %03x\n", nnn); // jump to address
+      break;
+    case OP_2NNN:
+      fprintf(stderr, "CALL %03x\n", nnn); // execute subroutine
+      break;
+    case OP_3XNN:
+      fprintf(stderr, "SEV V%01x %02x\n", x, nn); // skip if equal
+      break;
+    case OP_4XNN:
+      fprintf(stderr, "SNE V%01x %02x\n", x, nn); // skip if not equal
+      break;
+    case OP_5XY0:
+      fprintf(stderr, "SE V%01x V%01x\n", x, y); // skip if equal
+      break;
+    case OP_6XNN:
+      fprintf(stderr, "LD V%01x %02x\n", x, nn); // load in register
+      break;
+    case OP_7XNN:
+      fprintf(stderr, "ADD V%01x %02x\n", x, nn); // add constant
+      break;
+    case OP_8XY0:
+      fprintf(stderr, "LD V%01x V%01x\n", x, y);
+      break;
+    case OP_8XY1:
+      fprintf(stderr, "OR V%01x V%01x\n", x, y);
+      break;
+    case OP_8XY2:
+      fprintf(stderr, "AND V%01x V%01x\n", x, y);
+      break;
+    case OP_8XY3:
+      fprintf(stderr, "XOR V%01x V%01x\n", x, y);
+      break;
+    case OP_8XY4:
+      fprintf(stderr, "ADD V%01x V%01x\n", x, y);
+      break;
+    case OP_8XY5:
+      fprintf(stderr, "SUB V%01x V%01x\n", x, y);
+      break;
+    case OP_8XY6:
+      fprintf(stderr, "SHR V%01x V%01x\n", x, y);
+      break;
+    case OP_8XY7:
+      fprintf(stderr, "SUBN V%01x V%01x\n", x, y);
+      break;
+    case OP_8XYE:
+      fprintf(stderr, "SHL V%01x V%01x\n", x, y);
+      break;
+    case OP_9XY0:
+      fprintf(stderr, "SNE V%01x V%01x\n", x, y);
+      break;
+    case OP_ANNN:
+      fprintf(stderr, "LD I, %03x\n", nnn); // load NNN in register I
+      break;
+    case OP_BNNN:
+      fprintf(stderr, "JP V0, %03x\n", nnn); // jump to V0 + NNN
+      break;
+    case OP_CXNN:
+      fprintf(stderr, "RND V%01x, %02x\n", x, nn); // Set VX to a random number with a mask of NN
+      break;
+    case OP_DXYN:
+      fprintf(stderr, "DRW V%01x V%01x %01x\n", x, y, n);
+      break;
+    case OP_EX9E:
+      fprintf(stderr, "SKP V%01x\n", x);
+      break;
+    case OP_EXA1:
+      fprintf(stderr, "SKNP V%01x\n", x);
+      break;
+    case OP_FX07:
+      fprintf(stderr, "LD V%01x, DT\n", x);
+      break;
+    case OP_FX0A:
+      fprintf(stderr, "LD V%01x, K\n", x);
+      break;
+    case OP_FX15:
+      fprintf(stderr, "LD DT, V%01x\n", x);
+      break;
+    case OP_FX18:
+      fprintf(stderr, "LD ST, V%01x\n", x);
+      break;
+    case OP_FX1E:
+      fprintf(stderr, "ADD I, V%01x\n", x);
+      break;
+    case OP_FX29:
+      fprintf(stderr, "LD F, V%01x\n", x);
+      break;
+    case OP_FX33:
+      fprintf(stderr, "LD B, V%01x\n", x);
+      break;
+    case OP_FX55:
+      fprintf(stderr, "LD [I], V%01x\n", x);
+      break;
+    case OP_FX65:
+      fprintf(stderr, "LD V%01x, [I]\n", x);
+      break;
+    default:
+      fprintf(stderr, "UNKNOWN %02x%02x\n", instr->value[0], instr->value[1]);
+  }
+}
+
 int main(int argc, char **argv) {
   if (argc < 2){
     fprintf(stderr, "specify a program to run\n");
@@ -132,8 +258,10 @@ int main(int argc, char **argv) {
     }
 
     bool redraw = false;
+    struct instruction instr = {0};
     for (int i = 0; i < 9; i++) {
-      redraw |= cycle(kcode, &chip8);
+      redraw |= cycle(kcode, &chip8, &instr);
+      print_instruction(&instr);
     }
 
     if (loop_counter % 5 == 0) {
