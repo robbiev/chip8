@@ -7,6 +7,7 @@
 
 #define DISPLAY_COLS 64
 #define DISPLAY_ROWS 32
+#define DISPLAY_BYTES ((DISPLAY_COLS * DISPLAY_ROWS) / 8)
 
 #ifndef CHIP8_RAND
 #define CHIP8_RAND ((void)0))
@@ -89,13 +90,9 @@ struct instruction {
 void init(struct chip8 *chip8) {
   memcpy(chip8->memory, font, sizeof(font));
   chip8->pc = PROGRAM_START_ADDRESS;
-  //chip8.memory[0x1FF] = 1; // IBM
-  //chip8.memory[0x1FF] = 2; // opcodes
-  //chip8.memory[0x1FF] = 3; // flags
 }
 
 bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
-  bool redraw = false;
   uint8_t b1 = chip8->memory[chip8->pc];
   uint8_t b2 = chip8->memory[chip8->pc + 1];
   uint16_t new_pc = chip8->pc + 2;
@@ -108,12 +105,14 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
   instr->value[0] = b1;
   instr->value[1] = b2;
 
+  bool redraw_needed = false;
+
   switch (b1hi) {
     case 0x0:
       if (b1 == 0x00 && b2 == 0xe0) {
         instr->operation = OP_00E0;
         memset(chip8->display, 0, sizeof(chip8->display));
-        redraw = true;
+        redraw_needed = true;
         break;
       }
       if (b1 == 0x00 && b2 == 0xee) {
@@ -182,61 +181,56 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
           chip8->v[b1lo] ^= chip8->v[b2hi];
           chip8->v[0xf] = 0;
           break;
-        case 0x4:
+        case 0x4: {
           instr->operation = OP_8XY4;
-          {
-            uint8_t vx = chip8->v[b1lo];
-            uint8_t vy = chip8->v[b2hi];
-            if ((uint8_t)(vx + vy) < vx) {
-              chip8->v[0xf] = 1;
-            } else {
-              chip8->v[0xf] = 0;
-            }
-            chip8->v[b1lo] = vx + vy;
-            break;
+          uint8_t vx = chip8->v[b1lo];
+          uint8_t vy = chip8->v[b2hi];
+          if ((uint8_t)(vx + vy) < vx) {
+            chip8->v[0xf] = 1;
+          } else {
+            chip8->v[0xf] = 0;
           }
-        case 0x5:
-          instr->operation = OP_8XY5;
-          {
-            uint8_t vx = chip8->v[b1lo];
-            uint8_t vy = chip8->v[b2hi];
-            if (vy > vx)  {
-              chip8->v[0xf] = 0;
-            } else {
-              chip8->v[0xf] = 1;
-            }
-            chip8->v[b1lo] = vx - vy;
-          }
+          chip8->v[b1lo] = vx + vy;
           break;
-        case 0x6:
+        }
+        case 0x5: {
+          instr->operation = OP_8XY5;
+          uint8_t vx = chip8->v[b1lo];
+          uint8_t vy = chip8->v[b2hi];
+          if (vy > vx)  {
+            chip8->v[0xf] = 0;
+          } else {
+            chip8->v[0xf] = 1;
+          }
+          chip8->v[b1lo] = vx - vy;
+          break;
+        }
+        case 0x6: {
           instr->operation = OP_8XY6;
-          {
             uint8_t vy = chip8->v[b2hi];
             chip8->v[b1lo] = vy >> 1;
             chip8->v[0xf] = vy & 0x01;
-          }
           break;
-        case 0x7:
+        }
+        case 0x7: {
           instr->operation = OP_8XY7;
-          {
-            uint8_t vx = chip8->v[b1lo];
-            uint8_t vy = chip8->v[b2hi];
-            if (vx > vy)  {
-              chip8->v[0xf] = 0;
-            } else {
-              chip8->v[0xf] = 1;
-            }
-            chip8->v[b1lo] = vy - vx;
+          uint8_t vx = chip8->v[b1lo];
+          uint8_t vy = chip8->v[b2hi];
+          if (vx > vy)  {
+            chip8->v[0xf] = 0;
+          } else {
+            chip8->v[0xf] = 1;
           }
+          chip8->v[b1lo] = vy - vx;
           break;
-        case 0xe:
+        }
+        case 0xe: {
           instr->operation = OP_8XYE;
-          {
-            uint8_t vy = chip8->v[b2hi];
-            chip8->v[b1lo] = vy << 1;
-            chip8->v[0xf] = (vy & 0x80) != 0;
-          }
+          uint8_t vy = chip8->v[b2hi];
+          chip8->v[b1lo] = vy << 1;
+          chip8->v[0xf] = (vy & 0x80) != 0;
           break;
+        }
         default:
           assert(0);
       }
@@ -265,36 +259,35 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
       instr->operation = OP_CXNN;
       chip8->v[b1lo] = CHIP8_RAND() & b2;
       break;
-    case 0xd:
+    case 0xd: {
       instr->operation = OP_DXYN;
       // Draw a sprite at position VX, VY with N bytes of sprite data starting at the address stored in I
       // Set VF to 01 if any set pixels are changed to unset, and 00 otherwise
-      {
-        redraw = true;
-        uint8_t col = chip8->v[b1lo] & (DISPLAY_COLS - 1);
-        uint8_t row = chip8->v[b2hi] & (DISPLAY_ROWS - 1);
-        uint16_t address = chip8->i;
-        chip8->v[0xf] = 0;
-        for (int i = 0; i < b2lo && row < DISPLAY_ROWS; i++) {
-          uint8_t sprite_data = chip8->memory[address];
+      redraw_needed = true;
+      uint8_t col = chip8->v[b1lo] & (DISPLAY_COLS - 1);
+      uint8_t row = chip8->v[b2hi] & (DISPLAY_ROWS - 1);
+      uint16_t address = chip8->i;
+      chip8->v[0xf] = 0;
+      for (int i = 0; i < b2lo && row < DISPLAY_ROWS; i++) {
+        uint8_t sprite_data = chip8->memory[address];
 
-          for (int bit = 7; bit >= 0; bit--) {
-            if (col + (7-bit) >= DISPLAY_COLS) {
-              continue;
-            }
-            uint8_t value = (sprite_data >> bit) & 1;
-            uint8_t prev = chip8->display[(row * DISPLAY_COLS) + col + (7-bit)];
-            uint8_t new = prev ^ value;
-            chip8->display[(row * DISPLAY_COLS) + col + (7-bit)] = new;
-            if (prev == 1 && new == 0) {
-              chip8->v[0xf] = 1;
-            }
+        for (int bit = 7; bit >= 0; bit--) {
+          if (col + (7-bit) >= DISPLAY_COLS) {
+            continue;
           }
-          address++;
-          row++;
+          uint8_t value = (sprite_data >> bit) & 1;
+          uint8_t prev = chip8->display[(row * DISPLAY_COLS) + col + (7-bit)];
+          uint8_t new = prev ^ value;
+          chip8->display[(row * DISPLAY_COLS) + col + (7-bit)] = new;
+          if (prev == 1 && new == 0) {
+            chip8->v[0xf] = 1;
+          }
         }
+        address++;
+        row++;
       }
       break;
+    }
     case 0xe:
       switch (b2) {
         case 0x9e:
@@ -307,11 +300,9 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
         case 0xa1:
           instr->operation = OP_EXA1;
           // Skip the following instruction if the key corresponding to the hex value currently stored in register VX is not pressed
-        {
           if (chip8->v[b1lo] != key) {
             new_pc += 2;
           }
-        }
           break;
         default:
           assert(0);
@@ -356,7 +347,9 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
         case 0x33:
           instr->operation = OP_FX33;
           // Store the binary-coded decimal equivalent of the value stored in register VX at addresses I, I + 1, and I + 2
-          assert(0);
+          chip8->memory[chip8->i] = chip8->v[b1lo] / 100;
+          chip8->memory[chip8->i + 1] = (chip8->v[b1lo] / 10) % 10;
+          chip8->memory[chip8->i + 2] = chip8->v[b1lo] % 10;
           break;
         case 0x55:
           instr->operation = OP_FX55;
@@ -384,7 +377,7 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
       assert(0);
   }
   chip8->pc = new_pc;
-  return redraw;
+  return redraw_needed;
 }
 
 char key_code(char key) {

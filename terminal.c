@@ -233,6 +233,9 @@ int main(int argc, char **argv) {
   init(&chip8);
   // load the ROM
   read_file(file, &chip8.memory[PROGRAM_START_ADDRESS], (sizeof chip8.memory) - PROGRAM_START_ADDRESS);
+  //chip8.memory[0x1FF] = 1; // IBM
+  //chip8.memory[0x1FF] = 2; // opcodes
+  //chip8.memory[0x1FF] = 3; // flags
 
   enableRawMode();
 
