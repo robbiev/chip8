@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <string.h>
 
+#define ARRAY_LEN(a) (sizeof(a) / sizeof((a)[0]))
 #define PROGRAM_START_ADDRESS 0x200
 
 #define DISPLAY_COLS 64
@@ -90,6 +91,7 @@ struct instruction {
 void init(struct chip8 *chip8) {
   memcpy(chip8->memory, font, sizeof(font));
   chip8->pc = PROGRAM_START_ADDRESS;
+  chip8->sp = ARRAY_LEN(chip8->stack);
 }
 
 bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
@@ -119,7 +121,7 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
         instr->operation = OP_00EE;
         new_pc = chip8->stack[chip8->sp];
         new_pc += 2;
-        chip8->sp--;
+        chip8->sp++;
         break;
       }
       instr->operation = OP_0NNN; // ignored instruction (jump to machine code)
@@ -130,7 +132,7 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
       break;
     case 0x2:
       instr->operation = OP_2NNN;
-      chip8->sp++;
+      chip8->sp--;
       chip8->stack[chip8->sp] = chip8->pc;
       new_pc = (b1lo << 8) | b2;
       break;

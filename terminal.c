@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <sys/mman.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <termios.h>
