@@ -40,7 +40,7 @@ struct chip8 {
   uint16_t pc;
   uint8_t sp;
   uint16_t stack[16];
-  uint8_t display[DISPLAY_COLS * DISPLAY_ROWS];
+  uint8_t display[DISPLAY_BYTES];
   uint8_t memory[4096];
 };
 
@@ -275,11 +275,15 @@ bool cycle(char key, struct chip8 *chip8, struct instruction *instr) {
           if (col + (7-bit) >= DISPLAY_COLS) {
             continue;
           }
-          uint8_t value = (sprite_data >> bit) & 1;
-          uint8_t prev = chip8->display[(row * DISPLAY_COLS) + col + (7-bit)];
-          uint8_t new = prev ^ value;
-          chip8->display[(row * DISPLAY_COLS) + col + (7-bit)] = new;
-          if (prev == 1 && new == 0) {
+          size_t display_pos = (row * DISPLAY_COLS) + col + (7-bit);
+          uint8_t prev_byte = chip8->display[display_pos / 8];
+          uint8_t prev_bit = prev_byte >> (7 - (display_pos % 8)) & 1;
+          uint8_t sprite_bit = (sprite_data >> bit) & 1;
+          uint8_t new_bit = prev_bit ^ sprite_bit;
+          uint8_t prev_byte_cleared_bit = prev_byte & ~(1 << (7 - (display_pos % 8)));
+          uint8_t new_byte = prev_byte_cleared_bit | (new_bit << (7 - (display_pos % 8)));
+          chip8->display[display_pos / 8] = new_byte;
+          if (prev_bit == 1 && new_bit == 0) {
             chip8->v[0xf] = 1;
           }
         }

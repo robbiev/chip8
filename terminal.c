@@ -92,7 +92,12 @@ void draw(struct chip8 *chip8) {
   puts("\x1b[2J");
   for (int r = 0; r < DISPLAY_ROWS; r++) {
     for (int c = 0; c < DISPLAY_COLS; c++) {
-      uint8_t pixel = chip8->display[r * DISPLAY_COLS + c];
+      size_t display_pos = r * DISPLAY_COLS + c;
+      size_t display_index = display_pos / 8;
+      size_t display_bit = display_pos % 8;
+      uint8_t display_byte = chip8->display[display_index];
+      uint8_t pixel = (display_byte >> (7 - display_bit)) & 1;
+
       printf("%s", pixel ? "\u2588\u2588" : "  ");
     }
     printf("\n");
