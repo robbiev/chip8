@@ -41,7 +41,7 @@ void enableRawMode() {
 }
 
 char read_key() {
-  char c = -1;
+  char c = 0;
   ssize_t result = 0;
   while ((result = read(STDIN_FILENO, &c, 1)) == -1 && errno == EINTR);
   if (result == -1) {
@@ -50,18 +50,12 @@ char read_key() {
   return c;
 }
 
-int msleep(long msec) {
+int sleep_milliseconds(long msec) {
   struct timespec ts;
-  int res;
-
-  if (msec < 0) {
-    errno = EINVAL;
-    return -1;
-  }
-
   ts.tv_sec = msec / 1000;
   ts.tv_nsec = (msec % 1000) * 1000000;
 
+  int res;
   do {
     res = nanosleep(&ts, &ts);
   } while (res && errno == EINTR);
@@ -234,7 +228,7 @@ int main(int argc, char **argv) {
   char *file = argv[1];
 
   struct chip8 chip8 = {0};
-  init(&chip8);
+  chip8_init(&chip8);
   // load the ROM
   read_file(file, &chip8.memory[PROGRAM_START_ADDRESS], (sizeof chip8.memory) - PROGRAM_START_ADDRESS);
   //chip8.memory[0x1FF] = 1; // IBM
@@ -244,18 +238,29 @@ int main(int argc, char **argv) {
   enableRawMode();
 
   puts("\x1b[?1049h");
-  uint64_t key_age_counter = 0;
+
+  uint8_t key_code = CHIP8_KEY_CODE_NO_KEY;
+  uint64_t key_code_loop = 0;
+  bool redraw = false;
+
   uint64_t loop_counter = 0;
-  char key = -1;
   for (;;) {
     loop_counter++;
-    char k = read_key();
-    if (k != -1) {
-      key = k;
-      key_age_counter = 0;
+
+    // determine if a key was pressed - work around terminal being character based
+    uint8_t new_key_code = chip8_key_to_key_code(read_key());
+    if (new_key_code != CHIP8_KEY_CODE_NO_KEY) {
+      if (new_key_code == key_code) {
+        key_code_loop = loop_counter;
+      } else {
+        if (key_code != CHIP8_KEY_CODE_NO_KEY) {
+          chip8_key_code_up(&chip8, key_code);
+        }
+        key_code = new_key_code;
+        chip8_key_code_down(&chip8, key_code);
+        key_code_loop = loop_counter;
+      }
     }
-    char kcode = key_code(key);
-    key_age_counter++;
 
     if (chip8.dt > 0) {
       chip8.dt--;
@@ -264,24 +269,25 @@ int main(int argc, char **argv) {
       chip8.st--;
     }
 
-    bool redraw = false;
     struct cycle_result res = {0};
-    for (int i = 0; i < 9; i++) {
-      cycle(kcode, &chip8, &res);
+    for (int i = 0; i < 30; i++) {
+      cycle(&chip8, &res);
       redraw |= res.redraw_needed;
       print_instruction(&res.instr);
     }
 
-    if (loop_counter % 5 == 0) {
+    if (redraw && loop_counter % 5 == 0) {
       draw(&chip8);
+      redraw = false;
     }
 
-    // unset the key if it lasted for 13 cycles
-    if (key != -1 && key_age_counter % 13 == 0) {
-      key = -1;
-      key_age_counter = 0;
+    // unset the key when it lasted for some loops to simulate key presses
+    if (key_code != CHIP8_KEY_CODE_NO_KEY && loop_counter - key_code_loop >= 5) {
+      chip8_key_code_up(&chip8, key_code);
+      key_code = CHIP8_KEY_CODE_NO_KEY;
     }
-    msleep(16);
+
+    sleep_milliseconds(16);
   }
   puts("\x1b[?1049l");
   return 0;

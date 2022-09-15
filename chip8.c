@@ -14,6 +14,9 @@
 #define CHIP8_RAND ((void)0))
 #endif
 
+#define CHIP8_KEY_CODE_NO_KEY 0x1F
+#define CHIP8_KEY_CODE_EVENT_WANTED 0x2F
+
 uint8_t font[] = {
   0xF0, 0x90, 0x90, 0x90, 0xF0,
   0x20, 0x60, 0x20, 0x20, 0x70,
@@ -38,12 +41,26 @@ struct chip8 {
   uint8_t display[DISPLAY_BYTES];
   uint16_t stack[16];
   uint8_t v[16];
+
+  // bits for pressed keys, from F..0 (msb = key F, lsb = key 0)
+  uint16_t keys_currently_pressed;
+
   uint16_t pc;
   uint16_t i;
   uint8_t sp;
   uint8_t st;
   uint8_t dt;
+
+  // the last key that was released, or CHIP8_KEY_CODE_NO_KEY
+  uint8_t last_key_released_event;
 };
+
+// Every key can have two events max, press - depress. Repetition overwrites.
+// Goes from depress -> press -> depress -> press
+// However we want to know if if a depress happened
+
+// has a key been released since the last cycle, and which one
+// has a key been released since the first time I ran
 
 enum opcode {
   OP_00E0,
@@ -93,10 +110,26 @@ struct cycle_result {
   bool redraw_needed;
 };
 
-void init(struct chip8 *chip8) {
+void chip8_key_code_down(struct chip8 *chip8, uint8_t key_code) {
+  chip8->keys_currently_pressed |= (1 << key_code);
+}
+
+void chip8_key_code_up(struct chip8 *chip8, uint8_t key_code) {
+  chip8->keys_currently_pressed &= ~(1 << key_code);
+  if (chip8->last_key_released_event == CHIP8_KEY_CODE_EVENT_WANTED) {
+    chip8->last_key_released_event = key_code;
+  }
+}
+
+bool chip8_is_key_code_pressed(struct chip8 *chip8, uint8_t key_code) {
+  return (chip8->keys_currently_pressed & (1 << key_code)) != 0;
+}
+
+void chip8_init(struct chip8 *chip8) {
   memcpy(chip8->memory, font, sizeof(font));
   chip8->pc = PROGRAM_START_ADDRESS;
   chip8->sp = ARRAY_LEN(chip8->stack);
+  chip8->last_key_released_event = CHIP8_KEY_CODE_NO_KEY;
 }
 
 size_t min(size_t a, size_t b) {
@@ -106,7 +139,7 @@ size_t min(size_t a, size_t b) {
   return b;
 }
 
-void cycle(char key, struct chip8 *chip8, struct cycle_result *res) {
+void cycle(struct chip8 *chip8, struct cycle_result *res) {
   uint8_t b1 = chip8->memory[chip8->pc];
   uint8_t b2 = chip8->memory[chip8->pc + 1];
   uint16_t new_pc = chip8->pc + 2;
@@ -308,14 +341,14 @@ void cycle(char key, struct chip8 *chip8, struct cycle_result *res) {
         case 0x9e:
           res->instr.operation = OP_EX9E;
           // Skip the following instruction if the key corresponding to the hex value currently stored in register VX is pressed
-          if (chip8->v[b1lo] == key) {
+          if (chip8_is_key_code_pressed(chip8, chip8->v[b1lo])) {
             new_pc += 2;
           }
           break;
         case 0xa1:
           res->instr.operation = OP_EXA1;
           // Skip the following instruction if the key corresponding to the hex value currently stored in register VX is not pressed
-          if (chip8->v[b1lo] != key) {
+          if (!chip8_is_key_code_pressed(chip8, chip8->v[b1lo])) {
             new_pc += 2;
           }
           break;
@@ -333,10 +366,12 @@ void cycle(char key, struct chip8 *chip8, struct cycle_result *res) {
         case 0x0a:
           res->instr.operation = OP_FX0A;
           // Wait for a keypress and store the result in register VX
-          if (key == -1) {
+          if (chip8->last_key_released_event == CHIP8_KEY_CODE_NO_KEY || chip8->last_key_released_event == CHIP8_KEY_CODE_EVENT_WANTED) {
+            chip8->last_key_released_event = CHIP8_KEY_CODE_EVENT_WANTED;
             new_pc = chip8->pc;
           } else {
-            chip8->v[b1lo] = key;
+            chip8->v[b1lo] = chip8->last_key_released_event;
+            chip8->last_key_released_event = CHIP8_KEY_CODE_NO_KEY;
           }
           break;
         case 0x15:
@@ -394,7 +429,7 @@ void cycle(char key, struct chip8 *chip8, struct cycle_result *res) {
   chip8->pc = new_pc;
 }
 
-char key_code(char key) {
+uint8_t chip8_key_to_key_code(char key) {
   switch (key) {
     case '1': return 0x1;
     case '2': return 0x2;
@@ -412,6 +447,6 @@ char key_code(char key) {
     case 'r': return 0xD;
     case 'f': return 0xE;
     case 'v': return 0xF;
-    default: return -1;
+    default: return CHIP8_KEY_CODE_NO_KEY;
   }
 }
