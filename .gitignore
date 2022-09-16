@@ -1,4 +1,5 @@
 terminal
+sdl
 *.ch8
 *.dSYM/
 .idea
