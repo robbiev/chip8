@@ -318,7 +318,7 @@ void cycle(struct chip8 *chip8, struct cycle_result *res) {
       for (size_t i = 0; i < b2lo && row < DISPLAY_ROWS; i++) {
         uint8_t sprite_data = chip8->memory[address];
 
-        for (size_t bit = 0; bit < min(DISPLAY_COLS - col, 8); bit++) {
+        for (size_t bit = 0, end = min(DISPLAY_COLS - col, 8); bit < end; bit++) {
           size_t display_pos = (row * DISPLAY_COLS) + col + bit;
           uint8_t prev_byte = chip8->display[display_pos / 8];
           uint8_t prev_bit = prev_byte >> (7 - (display_pos % 8)) & 1;
