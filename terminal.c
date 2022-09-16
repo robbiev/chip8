@@ -14,9 +14,8 @@
 
 struct termios orig_termios;
 
-void die(const char *s) {
+void die(char *s) {
   perror(s);
-  //strerror(errno)
   exit(1);
 }
 
@@ -66,17 +65,14 @@ int sleep_milliseconds(long msec) {
 size_t read_file(char *file, uint8_t *buffer, size_t buffer_len) {
   FILE *f = fopen(file, "r");
   if (f == NULL) {
-    fprintf(stderr, "failed to open %s\n", file);
-    exit(1);
+    die("fopen");
   }
   size_t bytes_read = fread(buffer, sizeof *buffer, buffer_len, f);
   if (!feof(f)) {
-    fprintf(stderr, "couldn't read file %s\n", file);
-    exit(2);
+    die("fread");
   }
   if (fclose(f) != 0) {
-    fprintf(stderr, "failed to close %s\n", file);
-    exit(3);
+    die("fclose");
   }
   return bytes_read;
 }
@@ -223,7 +219,7 @@ void print_instruction(struct instruction *instr) {
 int main(int argc, char **argv) {
   if (argc < 2){
     fprintf(stderr, "specify a program to run\n");
-    exit(0);
+    exit(1);
   }
   char *file = argv[1];
 
@@ -262,12 +258,7 @@ int main(int argc, char **argv) {
       }
     }
 
-    if (chip8.dt > 0) {
-      chip8.dt--;
-    }
-    if (chip8.st > 0) {
-      chip8.st--;
-    }
+    chip8_60hz_timer(&chip8);
 
     struct cycle_result res = {0};
     for (int i = 0; i < 30; i++) {

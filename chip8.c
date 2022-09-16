@@ -125,6 +125,15 @@ bool chip8_is_key_code_pressed(struct chip8 *chip8, uint8_t key_code) {
   return (chip8->keys_currently_pressed & (1 << key_code)) != 0;
 }
 
+void chip8_60hz_timer(struct chip8 *chip8) {
+  if (chip8->dt > 0) {
+    chip8->dt--;
+  }
+  if (chip8->st > 0) {
+    chip8->st--;
+  }
+}
+
 void chip8_init(struct chip8 *chip8) {
   memcpy(chip8->memory, font, sizeof(font));
   chip8->pc = PROGRAM_START_ADDRESS;
