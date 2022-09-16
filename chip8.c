@@ -405,18 +405,14 @@ void cycle(struct chip8 *chip8, struct cycle_result *res) {
           res->instr.operation = OP_FX55;
           // Store the values of registers V0 to VX inclusive in memory starting at address I
           // I is set to I + X + 1 after operation
-          for (int i = 0; i <= b1lo; i++) {
-            chip8->memory[chip8->i + i] = chip8->v[i];
-          }
+          memcpy(&chip8->memory[chip8->i], chip8->v, b1lo + 1);
           chip8->i = chip8->i + b1lo + 1;
           break;
         case 0x65:
           res->instr.operation = OP_FX65;
           // Fill registers V0 to VX inclusive with the values stored in memory starting at address I
           // I is set to I + X + 1 after operation
-          for (int i = 0; i <= b1lo; i++) {
-            chip8->v[i] = chip8->memory[chip8->i + i];
-          }
+          memcpy(chip8->v, &chip8->memory[chip8->i], b1lo + 1);
           chip8->i = chip8->i + b1lo + 1;
           break;
         default:
