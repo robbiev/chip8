@@ -11,7 +11,7 @@
 #define DISPLAY_BYTES ((DISPLAY_COLS * DISPLAY_ROWS) / 8)
 
 #ifndef CHIP8_RAND
-#define CHIP8_RAND ((void)0))
+#define CHIP8_RAND() (0)
 #endif
 
 #define CHIP8_KEY_CODE_NO_KEY 0x1F
